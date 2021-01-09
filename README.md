@@ -1,1 +1,3 @@
 # jiminy
+
+Cricket simulation engine
