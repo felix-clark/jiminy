@@ -1,6 +1,7 @@
 //! Struct to define the format of a match
 
 /// Defines the format of a match
+#[derive(Debug)]
 pub struct Form {
     /// The number of turns each side has to bat.
     pub innings: u8,
@@ -13,6 +14,7 @@ pub struct Form {
     // TODO: overs for new ball (80 in test)?
     // TODO: fielding restrictions/powerplays
     // TODO: players per side (almost always 11)?
+    pub batsmen_per_side: u8,
     // TODO: Maximum overs per bowler (10 in ODI?)
 }
 
@@ -22,6 +24,7 @@ impl Default for Form {
             innings: 2,
             overs_per_innings: None,
             balls_per_over: 6,
+            batsmen_per_side: 11,
         }
     }
 }
