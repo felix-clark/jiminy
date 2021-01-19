@@ -2,7 +2,9 @@
 
 pub mod form;
 pub mod game;
+pub mod rating;
 pub mod sim;
+pub mod team;
 
 #[cfg(test)]
 mod tests {

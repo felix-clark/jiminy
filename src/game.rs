@@ -131,6 +131,7 @@ pub enum Dismissal {
 /// Normal runs
 pub enum Runs {
     /// Runs acquired by running. Batsmen change ends if this is odd.
+    /// This includes dots (value of 0)
     Running(u8),
     /// Ball reaches boundary after bouncing
     Four,
