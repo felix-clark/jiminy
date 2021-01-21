@@ -1,5 +1,7 @@
 //! Description of the state and events of a match.
 use crate::form;
+use crate::team;
+use team::Team;
 
 // For now just use a boolean as a flag for the team
 type TeamId = bool;
@@ -9,6 +11,11 @@ type TeamId = bool;
 pub struct GameState {
     /// The rules of the match
     form: form::Form,
+    /// The home team
+    team_a: Team,
+    /// The visiting team
+    team_b: Team,
+    // TODO:
     /// The number of innings completed
     innings: u8,
     /// TODO: This will need to be more sophisticated to account for which batters are out
@@ -28,9 +35,11 @@ pub struct GameState {
 }
 
 impl GameState {
-    pub fn new(rules: form::Form) -> Self {
+    pub fn new(rules: form::Form, team_a: Team, team_b: Team) -> Self {
         Self {
             form: rules,
+            team_a,
+            team_b,
             innings: 0,
             wickets: 0,
             overs: 0,
