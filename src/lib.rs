@@ -2,6 +2,7 @@
 
 pub mod form;
 pub mod game;
+pub mod player;
 pub mod rating;
 pub mod sim;
 pub mod team;
@@ -26,12 +27,7 @@ mod tests {
         let player_names = (0..N_PLAYERS)
             .into_iter()
             .map(|i| format!("{}_{}", label, i));
-        let players = player_names
-            .map(|name| team::Player {
-                name,
-                rating: test_rating(),
-            })
-            .collect();
+        let players = player_names.map(player::Player::new).collect();
         team::Team { name, players }
     }
 

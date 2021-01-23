@@ -1,7 +1,9 @@
 //! Description of the state and events of a match.
-use crate::form;
 use crate::team;
+use crate::{form, player::Player};
 use team::Team;
+
+use std::fmt::Display;
 
 // For now just use a boolean as a flag for the team
 type TeamId = bool;
@@ -119,6 +121,8 @@ impl GameState {
 }
 
 /// Methods of dismissal
+/// TODO: Include information about each dismissal like bowler, which fielder
+/// caught/stumped, etc.
 pub enum Dismissal {
     /// Legitimate delivery hits wicket and puts it down.
     Bowled,
@@ -214,5 +218,49 @@ impl Default for DeliveryOutcome {
             runs: Runs::Running(0),
             extras: Vec::new(),
         }
+    }
+}
+
+/// The stats of a batter for a single innings
+struct BatterInningsStats {
+    /// Runs scored by this batter
+    pub runs: u16,
+    /// Extras scored by the team while this batter is up
+    pub extras: u16,
+    /// Legal deliveries made to this batter
+    pub balls: u16,
+    /// Whether the batter had been made out
+    pub out: Option<Dismissal>,
+    /// Number of fours scored (the runs are also included in self.runs)
+    pub fours: u8,
+    /// Number of sixes scored (the runs are also included in self.runs)
+    pub sixes: u8,
+}
+
+impl Display for BatterInningsStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.balls == 0 {
+            write!(f, "-")
+        } else {
+            write!(f, "{} ({})", self.runs, self.balls)
+        }
+    }
+}
+
+struct TeamBattingInningsStats<'a> {
+    /// Reference to the team's lineup
+    // TODO: This should be allowed to change mid-innings for batters who haven't gone
+    // yet, in order to adapt strategy
+    pub lineup: &'a Vec<Player>,
+    // pub team: &'a Team,
+    /// Individual batting stats
+    pub batters: Vec<(&'a Player, BatterInningsStats)>,
+    /// Extra runs awarded to the team this inning
+    pub extras: u16,
+}
+
+impl<'a> TeamBattingInningsStats<'a> {
+    pub fn new(team: &'a Team) -> Self {
+        todo!()
     }
 }
