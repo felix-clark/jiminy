@@ -12,15 +12,6 @@ mod tests {
     use super::*;
     use rand::thread_rng;
 
-    fn test_rating() -> rating::PlayerRating {
-        use rating::*;
-        PlayerRating {
-            batting: BatRating {},
-            bowling: BowlRating {},
-            fielding: FieldRating {},
-        }
-    }
-
     fn test_team(label: &str) -> team::Team {
         const N_PLAYERS: usize = 11;
         let name = format!("team_{}", label);
@@ -34,8 +25,8 @@ mod tests {
     #[test]
     fn sim() {
         let rules = form::Form::test();
-        let team_a = test_team("A");
-        let team_b = test_team("B");
+        let team_a = test_team("AUS");
+        let team_b = test_team("NZ");
         let mut state = game::GameState::new(rules, team_a, team_b);
         let mut rng = thread_rng();
         while !state.complete() {
