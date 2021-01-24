@@ -1,19 +1,22 @@
 //! Player data and identification
 
 use crate::rating::PlayerRating;
+use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 type Id = usize;
 static PLAYER_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// Retrieve a new unique player ID
-fn get_new_player_id() -> usize {
+fn get_new_player_id() -> Id {
     // NOTE: This choice of ordering hasn't been considered.
     PLAYER_COUNTER.fetch_add(1, Ordering::SeqCst)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
+// #[serde(deny_unknown_fields)] // This makes an error if additional fields are present
 pub struct Player {
+    #[serde(skip, default = "get_new_player_id")]
     id: Id,
     pub name: String,
     pub rating: PlayerRating,

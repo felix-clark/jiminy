@@ -1,7 +1,8 @@
 //! Teams of players
 use crate::player::Player;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Team {
     pub name: String,
     pub players: Vec<Player>,
@@ -29,6 +30,24 @@ pub struct BattingOrder<'a> {
 }
 
 impl<'a> BattingOrder<'a> {
+    /// Return a Vec of players remaining in the order that satisfy the given query
+    // TODO: Consider returning an impl Iterator instead of collecting into a Vec. This
+    // is complicated due to the lifetime constraints.
+    pub fn query_remaining(&self, query: &dyn Fn(&Player) -> bool) -> Vec<&'a Player> {
+        // TODO: Define whether this should be reversed
+        self.remaining
+            .iter()
+            .filter_map(|&i| {
+                let batter: &'a Player = &self.batters[i];
+                if query(batter) {
+                    Some(batter)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     // TODO: Functions to modify the remaining order
 }
 

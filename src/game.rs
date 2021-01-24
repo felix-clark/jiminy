@@ -1,7 +1,6 @@
 //! Description of the state and events of a match.
-use crate::team;
+use crate::team::{BattingOrder, Team};
 use crate::{form, player::Player};
-use team::Team;
 
 use std::fmt::Display;
 
@@ -123,15 +122,17 @@ impl GameState {
 /// Methods of dismissal
 /// TODO: Include information about each dismissal like bowler, which fielder
 /// caught/stumped, etc.
+#[derive(Clone)]
 pub enum Dismissal {
     /// Legitimate delivery hits wicket and puts it down.
     Bowled,
     /// Ball is hit in the air and caught in-bounds
     Caught,
-    /// A delivery that would have hit the wickets instead first makes contact with the
-    /// striker (not the bat).
-    LegBeforeWicket,
+    /// Leg before wicket: A delivery that would have hit the wickets instead first
+    /// makes contact with the striker (not the bat).
+    Lbw,
     /// The striker is put out while running
+    // TODO: Consider not distinguishing these, but letting the simulation access both
     RunOutStriker,
     /// The only method by which the non-striker can be dismissed.
     RunOutNonStriker,
@@ -225,8 +226,9 @@ impl Default for DeliveryOutcome {
 struct BatterInningsStats {
     /// Runs scored by this batter
     pub runs: u16,
-    /// Extras scored by the team while this batter is up
-    pub extras: u16,
+    // Extras scored by the team while this batter is up
+    // Right now this is only counted at the team-level, which is sufficient for score-keeping.
+    // pub extras: u16,
     /// Legal deliveries made to this batter
     pub balls: u16,
     /// Whether the batter had been made out
@@ -235,6 +237,18 @@ struct BatterInningsStats {
     pub fours: u8,
     /// Number of sixes scored (the runs are also included in self.runs)
     pub sixes: u8,
+}
+
+impl BatterInningsStats {
+    pub fn new() -> Self {
+        Self {
+            runs: 0,
+            balls: 0,
+            out: None,
+            fours: 0,
+            sixes: 0,
+        }
+    }
 }
 
 impl Display for BatterInningsStats {
@@ -249,18 +263,76 @@ impl Display for BatterInningsStats {
 
 struct TeamBattingInningsStats<'a> {
     /// Reference to the team's lineup
-    // TODO: This should be allowed to change mid-innings for batters who haven't gone
-    // yet, in order to adapt strategy
-    pub lineup: &'a Vec<Player>,
+    pub batting_order: BattingOrder<'a>,
     // pub team: &'a Team,
     /// Individual batting stats
     pub batters: Vec<(&'a Player, BatterInningsStats)>,
     /// Extra runs awarded to the team this inning
     pub extras: u16,
+    /// Index of one of the current batters in self.batters
+    batter_a: usize,
+    /// The other of the current batters
+    batter_b: usize,
 }
 
 impl<'a> TeamBattingInningsStats<'a> {
+    /// Create a new team stats object for a fresh innings
     pub fn new(team: &'a Team) -> Self {
-        todo!()
+        let mut batting_order = team.batting_order();
+        let mut batters = Vec::new();
+        batters.push((
+            batting_order.next().expect("Not enough batters in order"),
+            BatterInningsStats::new(),
+        ));
+        batters.push((
+            batting_order.next().expect("Not enough batters in order"),
+            BatterInningsStats::new(),
+        ));
+        Self {
+            batting_order,
+            batters,
+            extras: 0,
+            batter_a: 0,
+            batter_b: 1,
+        }
+    }
+
+    /// Update the stats of a batter based on a delivery outcome
+    pub fn update(&mut self, batter: &Player, ball: &DeliveryOutcome) {
+        let (striker_idx, non_striker_idx) = if self.batters[self.batter_a].0 == batter {
+            (self.batter_a, self.batter_b)
+        } else if self.batters[self.batter_b].0 == batter {
+            (self.batter_b, self.batter_a)
+        } else {
+            panic!("Batter doesn't match either")
+        };
+        let striker_stats: &mut BatterInningsStats = &mut self.batters[striker_idx].1;
+        if ball.legal() {
+            striker_stats.balls += 1;
+        }
+        match ball.runs {
+            Runs::Running(x) => {
+                striker_stats.runs += x as u16;
+            }
+            Runs::Four => {
+                striker_stats.runs += 4;
+                striker_stats.fours += 1;
+            }
+            Runs::Six => {
+                striker_stats.runs += 6;
+                striker_stats.sixes += 1;
+            }
+        }
+        self.extras += ball.extras.iter().map(|x| x.runs() as u16).sum::<u16>();
+        match &ball.wicket {
+            Some(Dismissal::RunOutNonStriker) => {
+                self.batters[non_striker_idx].1.out = Some(Dismissal::RunOutNonStriker);
+            }
+            Some(wicket) => {
+                striker_stats.out = Some(wicket.clone());
+            }
+            None => {}
+        }
+        todo!("Replace batters who've been made out");
     }
 }

@@ -8,3 +8,7 @@ edition = "2018"
 
 [dependencies]
 rand = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# TODO: consider supporting yaml
+# serde_yaml = "0.8"

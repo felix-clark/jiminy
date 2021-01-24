@@ -1,7 +1,8 @@
 //! Ratings of players for various cricket skills
+use serde::{Deserialize, Serialize};
 
 /// All skill ratings grouped
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PlayerRating {
     pub batting: BatRating,
     pub bowling: BowlRating,
@@ -9,11 +10,11 @@ pub struct PlayerRating {
 }
 
 /// Ratings for batting
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct BatRating {}
 /// Ratings for bowling
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct BowlRating {}
 /// Ratings for fielding and wicket-keeping
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct FieldRating {}
