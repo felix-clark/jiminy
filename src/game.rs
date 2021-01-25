@@ -2,20 +2,18 @@
 use crate::team::{BattingOrder, Team};
 use crate::{form, player::Player};
 
-use std::fmt::Display;
+use std::{fmt::Display, mem};
 
 // For now just use a boolean as a flag for the team
 type TeamId = bool;
 
-// TODO: Format the output instead of deriving Debug
-#[derive(Debug)]
-pub struct GameState {
+pub struct GameState<'a> {
     /// The rules of the match
     form: form::Form,
     /// The home team
-    team_a: Team,
+    team_a: &'a Team,
     /// The visiting team
-    team_b: Team,
+    team_b: &'a Team,
     // TODO:
     /// The number of innings completed
     innings: u8,
@@ -26,17 +24,26 @@ pub struct GameState {
     /// The number of legal balls delivered in the over
     balls: u8,
     /// Which team is up to bat
-    batting_team: TeamId,
-    /// runs score by the batting team this innings
-    innings_runs: u16,
-    /// Scores completed in previous innings for each team
-    /// TODO: count wickets as well (probably use a new struct)
-    previous_innings_runs_a: Vec<u16>,
-    previous_innings_runs_b: Vec<u16>,
+    // batting_team: TeamId,
+    batting_team: *const Team,
+    /// Stats of the currently batting team
+    batting_innings_stats: TeamBattingInningsStats<'a>,
+    // /// runs score by the batting team this innings
+    // innings_runs: u16,
+    // /// Scores completed in previous innings for each team
+    // /// TODO: count wickets as well (probably use a new struct)
+    // previous_innings_runs_a: Vec<u16>,
+    // previous_innings_runs_b: Vec<u16>,
+    /// Previous innings scores
+    // TODO: Consider initializing all of these in advance and using an index/pointer to the current one
+    // TODO: Or, store team in the stats struct and collect into a single Vec
+    previous_innings_a: Vec<TeamBattingInningsStats<'a>>,
+    previous_innings_b: Vec<TeamBattingInningsStats<'a>>,
 }
 
-impl GameState {
-    pub fn new(rules: form::Form, team_a: Team, team_b: Team) -> Self {
+impl<'a> GameState<'a> {
+    pub fn new(rules: form::Form, team_a: &'a Team, team_b: &'a Team) -> Self {
+        let batting_innings_stats = TeamBattingInningsStats::new(team_a);
         Self {
             form: rules,
             team_a,
@@ -45,10 +52,10 @@ impl GameState {
             wickets: 0,
             overs: 0,
             balls: 0,
-            batting_team: false,
-            innings_runs: 0,
-            previous_innings_runs_a: Vec::new(),
-            previous_innings_runs_b: Vec::new(),
+            batting_team: team_a,
+            batting_innings_stats,
+            previous_innings_a: Vec::new(),
+            previous_innings_b: Vec::new(),
         }
     }
 
@@ -67,28 +74,27 @@ impl GameState {
 
     /// Update the game state based on the outcome of a delivery
     pub fn update(&mut self, ball: &DeliveryOutcome) {
-        let runs = ball.runs.runs() as u16;
-        // TODO: Some of these should count against the bowler, and others not.
-        // Account for this when tracking individual stats.
-        let extras = ball.extras.iter().map(Extra::runs).sum::<u8>() as u16;
-        self.innings_runs += runs + extras;
+        self.batting_innings_stats.update(&ball);
 
-        // TODO: account for which batsmen is out
-        if ball.wicket.is_some() {
-            self.wickets += 1;
-        }
-
+        // TODO: Count these in TeamBattingInningsStats
         if ball.legal() {
             self.balls += 1;
         }
         if self.balls >= self.form.balls_per_over {
             self.balls = 0;
             self.overs += 1;
+            self.batting_innings_stats.switch_striker();
         }
 
         // Check if we need to change to a new innings
         let mut new_innings = false;
-        if self.wickets + 1 >= self.form.batsmen_per_side {
+        // if self.wickets + 1 >= self.form.batsmen_per_side {
+        // TODO: Need to pass batsmen_per_side to team lineup
+        if self.batting_innings_stats.all_out() {
+            assert_eq!(
+                self.batting_innings_stats.wickets() + 1,
+                self.form.batsmen_per_side
+            );
             new_innings = true;
         }
         if let Some(opi) = self.form.overs_per_innings {
@@ -107,15 +113,39 @@ impl GameState {
         self.overs = 0;
         self.wickets = 0;
         self.innings += 1;
-        if self.batting_team {
-            self.previous_innings_runs_a.push(self.innings_runs);
-        } else {
-            self.previous_innings_runs_b.push(self.innings_runs);
-        }
-        self.innings_runs = 0;
         // TODO: The batting team doesn't always switch if the trailing team is made to
         // go again (down by ~150+ runs)
-        self.batting_team = !self.batting_team;
+        let next_batting_team: &Team = if self.batting_team == self.team_a {
+            &self.team_b
+        } else if self.batting_team == self.team_b {
+            &self.team_a
+        } else {
+            panic!("Should be one of these two teams")
+        };
+        if self.batting_team == self.team_a {
+            self.previous_innings_a.push(mem::replace(
+                &mut self.batting_innings_stats,
+                TeamBattingInningsStats::new(next_batting_team),
+            ));
+        } else {
+            self.previous_innings_b.push(mem::replace(
+                &mut self.batting_innings_stats,
+                TeamBattingInningsStats::new(&*next_batting_team),
+            ));
+        }
+        self.batting_team = next_batting_team;
+    }
+
+    /// Print a summary of each innings to stdout
+    pub fn print_innings_summary(&self) {
+        println!("\n{}:", self.team_a.name);
+        for innings in self.previous_innings_a.iter() {
+            innings.print_summary();
+        }
+        println!("\n{}:", self.team_b.name);
+        for innings in self.previous_innings_b.iter() {
+            innings.print_summary();
+        }
     }
 }
 
@@ -125,21 +155,34 @@ impl GameState {
 #[derive(Clone)]
 pub enum Dismissal {
     /// Legitimate delivery hits wicket and puts it down.
-    Bowled,
+    Bowled(String),
     /// Ball is hit in the air and caught in-bounds
-    Caught,
+    Caught(String, String),
     /// Leg before wicket: A delivery that would have hit the wickets instead first
     /// makes contact with the striker (not the bat).
-    Lbw,
+    Lbw(String),
     /// The striker is put out while running
     // TODO: Consider not distinguishing these, but letting the simulation access both
-    RunOutStriker,
+    RunOutStriker(String),
     /// The only method by which the non-striker can be dismissed.
-    RunOutNonStriker,
+    RunOutNonStriker(String),
     /// The wicket-keeper puts down the wicket while the striker is out of the crease.
     /// Takes precedence over run-out.
-    Stumped,
+    Stumped(String),
     // TODO: rare dismissals
+}
+
+impl Display for Dismissal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Dismissal::*;
+        match &self {
+            Bowled(bowler) => write!(f, "b {}", bowler),
+            Caught(caught, bowler) => write!(f, "c {} b {}", caught, bowler),
+            Lbw(bowler) => write!(f, "lbw b {}", bowler),
+            RunOutStriker(fielder) | RunOutNonStriker(fielder) => write!(f, "runout ({})", fielder),
+            Stumped(keeper) => write!(f, "st {}", keeper),
+        }
+    }
 }
 
 /// Normal runs
@@ -255,8 +298,10 @@ impl Display for BatterInningsStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.balls == 0 {
             write!(f, "-")
-        } else {
+        } else if self.out.is_some() {
             write!(f, "{} ({})", self.runs, self.balls)
+        } else {
+            write!(f, "{}* ({})", self.runs, self.balls)
         }
     }
 }
@@ -273,6 +318,9 @@ struct TeamBattingInningsStats<'a> {
     batter_a: usize,
     /// The other of the current batters
     batter_b: usize,
+    // TODO: count balls and overs here as well? (requires reference to rules)
+    /// Whether batter_a is the striker
+    striker_a: bool,
 }
 
 impl<'a> TeamBattingInningsStats<'a> {
@@ -294,24 +342,86 @@ impl<'a> TeamBattingInningsStats<'a> {
             extras: 0,
             batter_a: 0,
             batter_b: 1,
+            striker_a: true,
         }
     }
 
-    /// Update the stats of a batter based on a delivery outcome
-    pub fn update(&mut self, batter: &Player, ball: &DeliveryOutcome) {
-        let (striker_idx, non_striker_idx) = if self.batters[self.batter_a].0 == batter {
-            (self.batter_a, self.batter_b)
-        } else if self.batters[self.batter_b].0 == batter {
-            (self.batter_b, self.batter_a)
+    /// Returns true iff the innings is over
+    pub fn all_out(&self) -> bool {
+        let num_batters = self.batters.len();
+        self.batter_a >= num_batters || self.batter_b >= num_batters
+    }
+
+    /// Return the total number of team runs
+    pub fn team_runs(&self) -> u16 {
+        let batter_runs = self.batters.iter().map(|(_, st)| st.runs).sum::<u16>();
+        batter_runs + self.extras
+    }
+
+    /// Return the total number of wickets
+    pub fn wickets(&self) -> u8 {
+        self.batters
+            .iter()
+            .filter(|(_, st)| st.out.is_some())
+            .count() as u8
+    }
+
+    /// Switch which batter is the striker. This must be done on a new over, and is done
+    /// automatically when an odd number of runs are scored.
+    pub fn switch_striker(&mut self) {
+        self.striker_a = !self.striker_a;
+    }
+
+    /// Returns a reference to the current striker
+    // pub fn striker(&self) -> Option<&Player> {
+    pub fn striker(&self) -> &Player {
+        let striker_idx = if self.striker_a {
+            self.batter_a
         } else {
-            panic!("Batter doesn't match either")
+            self.batter_b
         };
+        assert!(
+            striker_idx < self.batters.len(),
+            "Innings is over, can't get striker"
+        );
+        &self.batters[striker_idx].0
+    }
+
+    /// Returns a reference to the current non-striker
+    pub fn non_striker(&self) -> &Player {
+        let non_striker_idx = if self.striker_a {
+            self.batter_b
+        } else {
+            self.batter_a
+        };
+        assert!(
+            non_striker_idx < self.batters.len(),
+            "Innings is over, can't get striker"
+        );
+        &self.batters[non_striker_idx].0
+    }
+
+    /// Update the stats of a batter based on a delivery outcome
+    pub fn update(&mut self, ball: &DeliveryOutcome) {
+        let (striker_idx, non_striker_idx) = if self.striker_a {
+            (self.batter_a, self.batter_b)
+        } else {
+            (self.batter_b, self.batter_a)
+        };
+
         let striker_stats: &mut BatterInningsStats = &mut self.batters[striker_idx].1;
         if ball.legal() {
             striker_stats.balls += 1;
         }
+
+        let mut switch_striker: bool = false;
+
+        // Add runs and extras to the totals
         match ball.runs {
             Runs::Running(x) => {
+                if x % 2 == 1 {
+                    switch_striker = !switch_striker;
+                }
                 striker_stats.runs += x as u16;
             }
             Runs::Four => {
@@ -324,15 +434,71 @@ impl<'a> TeamBattingInningsStats<'a> {
             }
         }
         self.extras += ball.extras.iter().map(|x| x.runs() as u16).sum::<u16>();
-        match &ball.wicket {
-            Some(Dismissal::RunOutNonStriker) => {
-                self.batters[non_striker_idx].1.out = Some(Dismissal::RunOutNonStriker);
+
+        // Switch if bye/leg byes result in an odd number of runs
+        for extra in ball
+            .extras
+            .iter()
+            .filter(|ex| matches!(ex, Extra::Bye(_) | Extra::LegBye(_)))
+        {
+            match extra {
+                Extra::Bye(Runs::Running(b)) | Extra::LegBye(Runs::Running(b)) => {
+                    if b % 2 == 1 {
+                        switch_striker = !switch_striker;
+                    }
+                }
+                _ => unreachable!(),
             }
-            Some(wicket) => {
+        }
+
+        // Check for wickets in the outcome
+        if let Some(wicket) = &ball.wicket {
+            if matches!(wicket, Dismissal::RunOutNonStriker(_)) {
+                self.batters[non_striker_idx].1.out = Some(wicket.clone());
+            } else {
                 striker_stats.out = Some(wicket.clone());
             }
-            None => {}
         }
-        todo!("Replace batters who've been made out");
+
+        // Replace batters if they've been made out
+        if self.batters[self.batter_a].1.out.is_some() {
+            // This may not be a valid index if the lineup is over
+            self.batter_a = self.batters.len();
+            if let Some(batter) = self.batting_order.next() {
+                self.batters.push((batter, BatterInningsStats::new()));
+            }
+        }
+        if self.batters[self.batter_b].1.out.is_some() {
+            // This may not be a valid index if the lineup is over
+            self.batter_b = self.batters.len();
+            if let Some(batter) = self.batting_order.next() {
+                self.batters.push((batter, BatterInningsStats::new()));
+            }
+        }
+
+        if switch_striker {
+            self.switch_striker();
+        }
+    }
+
+    /// Print a summary table of the batting stats
+    // TODO: Consider returning the table to allow printing to e.g. a file
+    pub fn print_summary(&self) {
+        use prettytable::{format::consts::*, Table};
+        let mut table = Table::new();
+        table.set_format(*FORMAT_NO_LINESEP_WITH_TITLE);
+        // table.set_format(*FORMAT_NO_BORDER_LINE_SEPARATOR);
+        table.set_titles(row!["Batter", "Wicket", "R (B)"]);
+        for batter in &self.batters {
+            table.add_row(row![
+                batter.0.name,
+                match &batter.1.out {
+                    Some(wicket) => format!("{}", wicket),
+                    None => "Not out".to_string(),
+                },
+                batter.1,
+            ]);
+        }
+        table.printstd();
     }
 }

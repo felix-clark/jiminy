@@ -1,4 +1,6 @@
 //! Cricket simulation engine
+#[macro_use]
+extern crate prettytable;
 
 pub mod form;
 pub mod game;
@@ -27,12 +29,13 @@ mod tests {
         let rules = form::Form::test();
         let team_a = test_team("AUS");
         let team_b = test_team("NZ");
-        let mut state = game::GameState::new(rules, team_a, team_b);
+        let mut state = game::GameState::new(rules, &team_a, &team_b);
         let mut rng = thread_rng();
+
         while !state.complete() {
             let ball = sim::test_rand_delivery(&mut rng);
             state.update(&ball);
         }
-        dbg!(state);
+        state.print_innings_summary();
     }
 }

@@ -8,7 +8,10 @@ pub fn test_rand_delivery(rng: &mut impl Rng) -> DeliveryOutcome {
     let rand: f64 = rng.sample(dist);
     if rand < 0.02 {
         DeliveryOutcome {
-            wicket: Some(Dismissal::Caught),
+            wicket: Some(Dismissal::Caught(
+                "?fielder".to_string(),
+                "?bowler".to_string(),
+            )),
             ..Default::default()
         }
     } else if rand <= 0.4 {
