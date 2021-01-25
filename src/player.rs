@@ -16,6 +16,8 @@ fn get_new_player_id() -> Id {
 #[derive(Debug, Deserialize, Serialize)]
 // #[serde(deny_unknown_fields)] // This makes an error if additional fields are present
 pub struct Player {
+    // TODO: consider using team + cap number to identify test players, although this
+    // will not cover cricketers who have not made a test appearance.
     #[serde(skip, default = "get_new_player_id")]
     id: Id,
     pub name: String,

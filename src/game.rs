@@ -4,9 +4,6 @@ use crate::{form, player::Player};
 
 use std::{fmt::Display, mem};
 
-// For now just use a boolean as a flag for the team
-type TeamId = bool;
-
 pub struct GameState<'a> {
     /// The rules of the match
     form: form::Form,
@@ -14,26 +11,14 @@ pub struct GameState<'a> {
     team_a: &'a Team,
     /// The visiting team
     team_b: &'a Team,
-    // TODO:
-    /// The number of innings completed
-    innings: u8,
-    /// TODO: This will need to be more sophisticated to account for which batters are out
-    wickets: u8,
     /// The number of overs that have been completed
     overs: u16,
     /// The number of legal balls delivered in the over
     balls: u8,
     /// Which team is up to bat
-    // batting_team: TeamId,
     batting_team: *const Team,
     /// Stats of the currently batting team
     batting_innings_stats: TeamBattingInningsStats<'a>,
-    // /// runs score by the batting team this innings
-    // innings_runs: u16,
-    // /// Scores completed in previous innings for each team
-    // /// TODO: count wickets as well (probably use a new struct)
-    // previous_innings_runs_a: Vec<u16>,
-    // previous_innings_runs_b: Vec<u16>,
     /// Previous innings scores
     // TODO: Consider initializing all of these in advance and using an index/pointer to the current one
     // TODO: Or, store team in the stats struct and collect into a single Vec
@@ -48,8 +33,6 @@ impl<'a> GameState<'a> {
             form: rules,
             team_a,
             team_b,
-            innings: 0,
-            wickets: 0,
             overs: 0,
             balls: 0,
             batting_team: team_a,
@@ -64,7 +47,8 @@ impl<'a> GameState<'a> {
         // TODO: Match can also be complete when one team is leading and the other team
         // has no more chances to bat.
         // TODO: It can also finish due to time, which is currently not tracked.
-        self.innings >= 2 * self.form.innings
+        self.previous_innings_a.len() as u8 >= self.form.innings
+            && self.previous_innings_b.len() as u8 >= self.form.innings
     }
 
     /// Batting team declares to complete their innings
@@ -111,8 +95,6 @@ impl<'a> GameState<'a> {
     fn new_innings(&mut self) {
         self.balls = 0;
         self.overs = 0;
-        self.wickets = 0;
-        self.innings += 1;
         // TODO: The batting team doesn't always switch if the trailing team is made to
         // go again (down by ~150+ runs)
         let next_batting_team: &Team = if self.batting_team == self.team_a {
