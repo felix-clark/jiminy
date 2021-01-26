@@ -17,6 +17,12 @@ impl Team {
             remaining,
         }
     }
+
+    pub fn bowlers(&self) -> Bowlers {
+        let bowlers: Vec<&Player> = self.players[5..11].iter().rev().collect();
+        let last: &Player = &bowlers[1];
+        Bowlers { bowlers, last }
+    }
 }
 
 /// Tracks the batting order. This must be able to change mid-game to adjust strategy
@@ -56,5 +62,28 @@ impl<'a> Iterator for BattingOrder<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.remaining.pop().map(|i| &self.batters[i])
+    }
+}
+
+/// Iterates through available bowlers
+// TODO: Incorporate various strategies
+pub struct Bowlers<'a> {
+    pub bowlers: Vec<&'a Player>,
+    /// The previous bowler so that we don't repeat
+    last: *const Player,
+}
+
+impl<'a> Bowlers<'a> {
+    // TODO: methods to adjust strategy (?)
+}
+
+impl<'a> Iterator for Bowlers<'a> {
+    type Item = &'a Player;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Right now just switch between the top two bowlers
+        let bowler: &Player = self.bowlers.iter().find(|&&b| self.last != b).unwrap();
+        self.last = bowler;
+        Some(bowler)
     }
 }

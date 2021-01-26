@@ -1,8 +1,11 @@
 //! Description of the state and events of a match.
-use crate::team::{BattingOrder, Team};
+use crate::team::{BattingOrder, Bowlers, Team};
 use crate::{form, player::Player};
 
-use std::{fmt::Display, mem};
+use std::{
+    fmt::{self, Display},
+    mem,
+};
 
 pub struct GameState<'a> {
     /// The rules of the match
@@ -155,7 +158,7 @@ pub enum Dismissal {
 }
 
 impl Display for Dismissal {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Dismissal::*;
         match &self {
             Bowled(bowler) => write!(f, "b {}", bowler),
@@ -251,9 +254,6 @@ impl Default for DeliveryOutcome {
 struct BatterInningsStats {
     /// Runs scored by this batter
     pub runs: u16,
-    // Extras scored by the team while this batter is up
-    // Right now this is only counted at the team-level, which is sufficient for score-keeping.
-    // pub extras: u16,
     /// Legal deliveries made to this batter
     pub balls: u16,
     /// Whether the batter had been made out
@@ -274,10 +274,15 @@ impl BatterInningsStats {
             sixes: 0,
         }
     }
+
+    /// Return the strike rate for the batter
+    pub fn strike_rate(&self) -> f32 {
+        (self.runs as f32) * 100. / (self.balls as f32)
+    }
 }
 
 impl Display for BatterInningsStats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.balls == 0 {
             write!(f, "-")
         } else if self.out.is_some() {
@@ -290,12 +295,12 @@ impl Display for BatterInningsStats {
 
 struct TeamBattingInningsStats<'a> {
     /// Reference to the team's lineup
-    pub batting_order: BattingOrder<'a>,
+    batting_order: BattingOrder<'a>,
     // pub team: &'a Team,
     /// Individual batting stats
-    pub batters: Vec<(&'a Player, BatterInningsStats)>,
+    batters: Vec<(&'a Player, BatterInningsStats)>,
     /// Extra runs awarded to the team this inning
-    pub extras: u16,
+    extras: u16,
     /// Index of one of the current batters in self.batters
     batter_a: usize,
     /// The other of the current batters
@@ -470,15 +475,127 @@ impl<'a> TeamBattingInningsStats<'a> {
         let mut table = Table::new();
         table.set_format(*FORMAT_NO_LINESEP_WITH_TITLE);
         // table.set_format(*FORMAT_NO_BORDER_LINE_SEPARATOR);
-        table.set_titles(row!["Batter", "Wicket", "R (B)"]);
+        table.set_titles(row!["Batter", "Wicket", "R (B)", "4s", "6s", "SR"]);
         for batter in &self.batters {
+            let batter_stats = &batter.1;
             table.add_row(row![
                 batter.0.name,
-                match &batter.1.out {
+                match &batter_stats.out {
                     Some(wicket) => format!("{}", wicket),
                     None => "Not out".to_string(),
                 },
-                batter.1,
+                batter_stats,
+                batter_stats.fours,
+                batter_stats.sixes,
+                format!("{:.2}", batter_stats.strike_rate()),
+            ]);
+        }
+        table.printstd();
+    }
+}
+
+/// The bowling stats of a single bowler in a single innings
+pub struct BowlerInningsStats {
+    /// Number of balls bowled
+    balls: u16,
+    /// maiden overs
+    // TODO: implement this stat counter
+    maiden_overs: u16,
+    /// Runs conceded
+    runs: u16,
+    /// Wickets taken
+    wickets: u8,
+    // TODO: consider tracking dots, 4s, and 6s
+    /// Wides
+    wides: u16,
+    /// No-balls
+    no_balls: u16,
+}
+
+impl BowlerInningsStats {
+    pub fn new() -> Self {
+        Self {
+            balls: 0,
+            maiden_overs: 0,
+            runs: 0,
+            wickets: 0,
+            wides: 0,
+            no_balls: 0,
+        }
+    }
+
+    /// Return the economy rate
+    pub fn economy(&self, balls_per_over: u8) -> f32 {
+        (self.runs as f32) * (balls_per_over as f32) / (self.balls as f32)
+    }
+
+    // NOTE: bowler average and strike rate are not reasonable stats to evaluate at the
+    // level of a single innings
+}
+
+impl Display for BowlerInningsStats {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // NOTE: An alternative output would be X-Y-Z-W for overs, maidens, runs,
+        // wickets respectively. Overs would require balls-per-over.
+        write!(f, "{}/{}", self.wickets, self.runs)
+    }
+}
+
+struct TeamBowlingInningsStats<'a> {
+    /// Reference to team's bowling
+    bowlers: Bowlers<'a>,
+    /// Stats of individual bowlers
+    bowler_stats: Vec<(&'a Player, BowlerInningsStats)>,
+    /// Index of bowler that is currently bowling
+    current_bowler_index: usize,
+}
+
+impl<'a> TeamBowlingInningsStats<'a> {
+    /// Create a new team stats object for an innings
+    pub fn new(team: &'a Team) -> Self {
+        let mut bowlers = team.bowlers();
+        let bowler_stats: Vec<(&Player, BowlerInningsStats)> = bowlers
+            .bowlers
+            .iter()
+            .map(|&blr| (blr, BowlerInningsStats::new()))
+            .collect();
+        let current_bowler_index = bowler_stats
+            .iter()
+            .position(|(b, _)| b == &bowlers.next().unwrap())
+            .unwrap();
+        Self {
+            bowlers,
+            bowler_stats,
+            current_bowler_index,
+        }
+    }
+
+    /// Print a summary table of the bowling stats
+    // TODO: Consider returning the table to allow printing to e.g. a file
+    pub fn print_summary(&self, balls_per_over: u8) {
+        use prettytable::{format::consts::*, Table};
+        let mut table = Table::new();
+        table.set_format(*FORMAT_NO_LINESEP_WITH_TITLE);
+        // table.set_format(*FORMAT_NO_BORDER_LINE_SEPARATOR);
+        table.set_titles(row!["Bowler", "O", "M", "R", "W", "Econ"]);
+        for bowler in &self.bowler_stats {
+            let bowler_stats = &bowler.1;
+            let overs_str = {
+                let n_overs = bowler_stats.balls / balls_per_over as u16;
+                let n_excess_balls = bowler_stats.balls % balls_per_over as u16;
+                if n_excess_balls == 0 {
+                    format!("{}", n_overs)
+                } else {
+                    format!("{}.{}", n_overs, n_excess_balls)
+                }
+            };
+            table.add_row(row![
+                bowler.0.name,
+                overs_str,
+                bowler_stats.maiden_overs,
+                bowler_stats.runs,
+                bowler_stats.wickets,
+                format!("{:.2}", bowler_stats.economy(balls_per_over)),
             ]);
         }
         table.printstd();
