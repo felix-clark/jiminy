@@ -29,6 +29,13 @@ impl<'a> GameState<'a> {
         }
     }
 
+    /// Get the current bowler
+    pub fn bowler(&self) -> Option<&Player> {
+        self.current_innings_stats
+            .as_ref()
+            .map(|st| st.bowling_stats.current_bowler())
+    }
+
     /// Whether the match is finished
     pub fn complete(&self) -> bool {
         // NOTE: There are other ways for a game to be finished than completion of all
@@ -649,6 +656,11 @@ impl<'a> TeamBowlingInningsStats<'a> {
                 self.bowler_stats.len() - 1
             }
         };
+    }
+
+    /// Returns a reference to the current bowler
+    pub fn current_bowler(&self) -> &Player {
+        &self.bowler_stats[self.current_bowler_index].0
     }
 
     /// Print a summary table of the bowling stats

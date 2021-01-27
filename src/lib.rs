@@ -26,14 +26,16 @@ mod tests {
 
     #[test]
     fn sim() {
+        use sim::{Model, TestModel};
         let rules = form::Form::test();
         let team_a = test_team(1, "AUS");
         let team_b = test_team(5, "NZ");
         let mut state = game::GameState::new(rules, &team_a, &team_b);
         let mut rng = thread_rng();
+        let model = TestModel {};
 
         while !state.complete() {
-            let ball = sim::test_rand_delivery(&mut rng);
+            let ball = model.generate_delivery(&mut rng, &state);
             state.update(&ball);
         }
         state.print_innings_summary();
