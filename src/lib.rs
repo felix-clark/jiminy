@@ -14,21 +14,21 @@ mod tests {
     use super::*;
     use rand::thread_rng;
 
-    fn test_team(label: &str) -> team::Team {
+    fn test_team(id: u16, label: &str) -> team::Team {
         const N_PLAYERS: usize = 11;
         let name = format!("team_{}", label);
         let player_names = (0..N_PLAYERS)
             .into_iter()
             .map(|i| format!("{}_{}", label, i));
         let players = player_names.map(player::Player::new).collect();
-        team::Team { name, players }
+        team::Team { id, name, players }
     }
 
     #[test]
     fn sim() {
         let rules = form::Form::test();
-        let team_a = test_team("AUS");
-        let team_b = test_team("NZ");
+        let team_a = test_team(1, "AUS");
+        let team_b = test_team(5, "NZ");
         let mut state = game::GameState::new(rules, &team_a, &team_b);
         let mut rng = thread_rng();
 

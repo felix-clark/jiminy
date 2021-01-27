@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Team {
+    pub id: u16,
     pub name: String,
     pub players: Vec<Player>,
 }
@@ -24,6 +25,14 @@ impl Team {
         Bowlers { bowlers, last }
     }
 }
+
+impl PartialEq for Team {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for Team {}
 
 /// Tracks the batting order. This must be able to change mid-game to adjust strategy
 /// (only for batters who have not yet batted, of course).
