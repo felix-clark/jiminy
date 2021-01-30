@@ -1,6 +1,13 @@
 //! Description of the state and events of a match.
-use crate::team::{BattingOrder, Bowlers, Team};
-use crate::{form, player::Player};
+use crate::{
+    form,
+    player::{Player, PlayerDb},
+    rating::PlayerRating,
+};
+use crate::{
+    player::PlayerId,
+    team::{BattingOrder, Bowlers, Team},
+};
 
 use std::fmt::{self, Display};
 
@@ -18,6 +25,14 @@ pub struct GameState<'a> {
     previous_innings: Vec<InningsStats<'a>>,
 }
 
+/// The snapshot at a moment (e.g. striker, bowler, non-striker, fielders...)
+pub struct GameSnapshot<'a, R>
+where
+    R: PlayerRating,
+{
+    striker: &'a Player<R>,
+}
+
 impl<'a> GameState<'a> {
     pub fn new(rules: form::Form, team_a: &'a Team, team_b: &'a Team) -> Self {
         let current_innings_stats = Some(InningsStats::new(team_a, team_b, rules.balls_per_over));
@@ -30,8 +45,17 @@ impl<'a> GameState<'a> {
         }
     }
 
+    // TODO: might need to constrain the db and snapshot references to distinguish them from the
+    // lifetime of this GameState
+    pub fn snapshot<R>(&self, db: &PlayerDb<R>) -> GameSnapshot<R>
+    where
+        R: PlayerRating,
+    {
+        todo!()
+    }
+
     /// Get the current bowler
-    pub fn bowler(&self) -> Option<&Player> {
+    pub fn bowler(&self) -> Option<PlayerId> {
         self.current_innings_stats
             .as_ref()
             .map(|st| st.bowling_stats.current_bowler())
@@ -147,10 +171,10 @@ impl<'a> GameState<'a> {
     pub fn print_innings_summary(&self) {
         for innings in self.previous_innings.iter() {
             println!("\n{} innings:", innings.batting_team.name);
-            innings.batting_stats.print_summary();
+            innings.batting_stats.print_summary(innings.batting_team);
             innings
                 .bowling_stats
-                .print_summary(self.form.balls_per_over);
+                .print_summary(innings.bowling_team, self.form.balls_per_over);
             println!("Total: {}/{}", innings.runs(), innings.wickets());
         }
         println!("\n{}: {}", self.team_a.name, self.team_score(self.team_a));
@@ -321,12 +345,12 @@ impl Display for BatterInningsStats {
     }
 }
 
-struct TeamBattingInningsStats<'a> {
+struct TeamBattingInningsStats {
     /// Reference to the team's lineup
-    batting_order: BattingOrder<'a>,
+    batting_order: BattingOrder,
     // pub team: &'a Team,
     /// Individual batting stats
-    batters: Vec<(&'a Player, BatterInningsStats)>,
+    batters: Vec<(PlayerId, BatterInningsStats)>,
     /// Extra runs awarded to the team this inning
     extras: u16,
     /// Index of one of the current batters in self.batters
@@ -338,9 +362,9 @@ struct TeamBattingInningsStats<'a> {
     striker_a: bool,
 }
 
-impl<'a> TeamBattingInningsStats<'a> {
+impl TeamBattingInningsStats {
     /// Create a new team stats object for a fresh innings
-    pub fn new(team: &'a Team) -> Self {
+    pub fn new(team: &Team) -> Self {
         let mut batting_order = team.batting_order();
         let mut batters = Vec::new();
         batters.push((
@@ -388,8 +412,8 @@ impl<'a> TeamBattingInningsStats<'a> {
     }
 
     /// Returns a reference to the current striker
-    // pub fn striker(&self) -> Option<&Player> {
-    pub fn striker(&self) -> &Player {
+    // pub fn striker(&self) -> Option<PlayerId> {
+    pub fn striker(&self) -> PlayerId {
         let striker_idx = if self.striker_a {
             self.batter_a
         } else {
@@ -399,11 +423,11 @@ impl<'a> TeamBattingInningsStats<'a> {
             striker_idx < self.batters.len(),
             "Innings is over, can't get striker"
         );
-        &self.batters[striker_idx].0
+        self.batters[striker_idx].0
     }
 
     /// Returns a reference to the current non-striker
-    pub fn non_striker(&self) -> &Player {
+    pub fn non_striker(&self) -> PlayerId {
         let non_striker_idx = if self.striker_a {
             self.batter_b
         } else {
@@ -413,7 +437,7 @@ impl<'a> TeamBattingInningsStats<'a> {
             non_striker_idx < self.batters.len(),
             "Innings is over, can't get striker"
         );
-        &self.batters[non_striker_idx].0
+        self.batters[non_striker_idx].0
     }
 
     /// Update the stats of a batter based on a delivery outcome
@@ -498,7 +522,7 @@ impl<'a> TeamBattingInningsStats<'a> {
 
     /// Print a summary table of the batting stats
     // TODO: Consider returning the table to allow printing to e.g. a file
-    pub fn print_summary(&self) {
+    pub fn print_summary(&self, team: &Team) {
         use prettytable::{format::consts::*, Table};
         let mut table = Table::new();
         table.set_format(*FORMAT_NO_LINESEP_WITH_TITLE);
@@ -507,7 +531,7 @@ impl<'a> TeamBattingInningsStats<'a> {
         for batter in &self.batters {
             let batter_stats = &batter.1;
             table.add_row(row![
-                batter.0.name,
+                team.get_name(batter.0).expect("Couldn't get batter name"),
                 match &batter_stats.out {
                     Some(wicket) => format!("{}", wicket),
                     None => "Not out".to_string(),
@@ -571,22 +595,22 @@ impl Display for BowlerInningsStats {
     }
 }
 
-struct TeamBowlingInningsStats<'a> {
+struct TeamBowlingInningsStats {
     /// Reference to team's bowling
-    bowlers: Bowlers<'a>,
+    bowlers: Bowlers,
     /// Stats of individual bowlers
-    bowler_stats: Vec<(&'a Player, BowlerInningsStats)>,
+    bowler_stats: Vec<(PlayerId, BowlerInningsStats)>,
     /// Index of bowler that is currently bowling
     current_bowler_index: usize,
     /// Whether the current over is a maiden (so far)
     current_over_maiden: bool,
 }
 
-impl<'a> TeamBowlingInningsStats<'a> {
+impl TeamBowlingInningsStats {
     /// Create a new team stats object for an innings
-    pub fn new(team: &'a Team) -> Self {
+    pub fn new(team: &Team) -> Self {
         let mut bowlers = team.bowlers();
-        let bowler_stats: Vec<(&Player, BowlerInningsStats)> = vec![(
+        let bowler_stats: Vec<(PlayerId, BowlerInningsStats)> = vec![(
             bowlers.next().expect("Could not get first bowler"),
             BowlerInningsStats::default(),
         )];
@@ -644,7 +668,7 @@ impl<'a> TeamBowlingInningsStats<'a> {
         }
         self.current_over_maiden = true;
 
-        let next_bowler: &Player = self.bowlers.next().expect("Could not get the next bowler");
+        let next_bowler: PlayerId = self.bowlers.next().expect("Could not get the next bowler");
         self.current_bowler_index = match self
             .bowler_stats
             .iter()
@@ -660,13 +684,13 @@ impl<'a> TeamBowlingInningsStats<'a> {
     }
 
     /// Returns a reference to the current bowler
-    pub fn current_bowler(&self) -> &Player {
-        &self.bowler_stats[self.current_bowler_index].0
+    pub fn current_bowler(&self) -> PlayerId {
+        self.bowler_stats[self.current_bowler_index].0
     }
 
     /// Print a summary table of the bowling stats
     // TODO: Consider returning the table to allow printing to e.g. a file
-    pub fn print_summary(&self, balls_per_over: u8) {
+    pub fn print_summary(&self, team: &Team, balls_per_over: u8) {
         use prettytable::{format::consts::*, Table};
         let mut table = Table::new();
         table.set_format(*FORMAT_NO_LINESEP_WITH_TITLE);
@@ -684,7 +708,7 @@ impl<'a> TeamBowlingInningsStats<'a> {
                 }
             };
             table.add_row(row![
-                bowler.0.name,
+                team.get_name(bowler.0).expect("Couldn't get player name"),
                 overs_str,
                 bowler_stats.maiden_overs,
                 bowler_stats.runs,
@@ -700,8 +724,8 @@ impl<'a> TeamBowlingInningsStats<'a> {
 struct InningsStats<'a> {
     batting_team: &'a Team,
     bowling_team: &'a Team,
-    batting_stats: TeamBattingInningsStats<'a>,
-    bowling_stats: TeamBowlingInningsStats<'a>,
+    batting_stats: TeamBattingInningsStats,
+    bowling_stats: TeamBowlingInningsStats,
     /// The number of overs that have been completed
     pub overs: u16,
     /// The number of legal balls delivered in the over

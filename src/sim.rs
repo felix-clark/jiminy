@@ -1,23 +1,47 @@
 //! Simulation and models
 pub mod model;
+use std::marker::PhantomData;
+
 pub use model::Model;
 
 use crate::{
-    game::{DeliveryOutcome, Dismissal, Runs},
-    player::Player,
+    game::{DeliveryOutcome, Dismissal, GameState, Runs},
+    player::{PlayerDb, PlayerId},
+    rating::PlayerRating,
 };
 use rand::{distributions::Uniform, Rng};
 
 /// A very simple model that doesn't use player stats
-pub struct TestModel {}
+pub struct NullModel<R>
+where
+    R: PlayerRating,
+{
+    _rating: PhantomData<R>,
+}
 
-impl Model for TestModel {
+impl<R> NullModel<R>
+where
+    R: PlayerRating,
+{
+    pub fn new() -> Self {
+        Self {
+            _rating: PhantomData::<R>,
+        }
+    }
+}
+
+impl<R> Model<R> for NullModel<R>
+where
+    R: PlayerRating,
+{
     fn generate_delivery(
         &self,
         rng: &mut impl Rng,
-        state: &crate::game::GameState,
+        db: &PlayerDb<R>,
+        state: &GameState,
     ) -> DeliveryOutcome {
-        let bowler: &Player = state.bowler().expect("Could not get bowler");
+        let bowler_id: PlayerId = state.bowler().expect("Could not get bowler");
+        let bowler = db.get(bowler_id).expect("DB error");
         let dist = Uniform::new(0., 1.);
         let rand: f64 = rng.sample(dist);
         if rand < 0.01 {
