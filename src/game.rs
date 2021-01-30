@@ -4,6 +4,7 @@ use crate::{form, player::Player};
 
 use std::fmt::{self, Display};
 
+/// Tracks the state of an ongoing match
 pub struct GameState<'a> {
     /// The rules of the match
     form: form::Form,
