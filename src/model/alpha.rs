@@ -1,36 +1,9 @@
-//! Ratings of players for various cricket skills
+//! A first attempt at a non-trivial model
 use serde::{Deserialize, Serialize};
-
-pub trait PlayerRating {}
-
-/// All skill ratings grouped
-#[derive(Debug, Deserialize, Serialize)]
-pub struct PlayerRatingNull {
-    pub batting: BatRatingNull,
-    pub bowling: BowlRatingNull,
-    pub fielding: FieldRatingNull,
-}
-impl Default for PlayerRatingNull {
-    fn default() -> Self {
-        Self {
-            batting: BatRatingNull {},
-            bowling: BowlRatingNull {},
-            fielding: FieldRatingNull {},
-        }
-    }
-}
-impl PlayerRating for PlayerRatingNull {}
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BatRatingNull {}
-#[derive(Debug, Deserialize, Serialize)]
-pub struct BowlRatingNull {}
-/// Ratings for fielding and wicket-keeping
-#[derive(Debug, Deserialize, Serialize)]
-pub struct FieldRatingNull {}
 
 /// Ratings for batting
 #[derive(Debug, Deserialize, Serialize)]
-pub struct BatRating {
+pub struct BatRatingAlpha {
     // avoid wickets (eye + contact?)
     //defense: u8,
     // may be redundant concept
@@ -42,7 +15,7 @@ pub struct BatRating {
     // sixes, possibly 4s
     power: u8,
 }
-impl Default for BatRating {
+impl Default for BatRatingAlpha {
     fn default() -> Self {
         Self {
             eye: 0,
@@ -55,7 +28,7 @@ impl Default for BatRating {
 
 /// Ratings for bowling
 #[derive(Debug, Deserialize, Serialize)]
-pub struct BowlRating {
+pub struct BowlRatingAlpha {
     // take bowling wickets. Perhaps should be composite of others.
     //attack: u8,
     // affects reaction time and eye (pace/fast bowling)
@@ -70,7 +43,7 @@ pub struct BowlRating {
     // movement off the ground
     spin: u8,
 }
-impl Default for BowlRating {
+impl Default for BowlRatingAlpha {
     fn default() -> Self {
         Self {
             velocity: 0,

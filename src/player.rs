@@ -1,6 +1,6 @@
 //! Player data and identification
 
-use crate::rating::PlayerRating;
+use crate::model::PlayerRating;
 use fnv::FnvHashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicUsize, Ordering};

@@ -4,17 +4,16 @@ extern crate prettytable;
 
 pub mod form;
 pub mod game;
+pub mod model;
 pub mod player;
-pub mod rating;
-pub mod sim;
 pub mod team;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use model::PlayerRatingNull;
     use player::PlayerDb;
     use rand::thread_rng;
-    use rating::PlayerRatingNull;
 
     fn test_team(db: &mut PlayerDb<PlayerRatingNull>, id: u16, label: &str) -> team::Team {
         const N_PLAYERS: usize = 11;
@@ -33,7 +32,7 @@ mod tests {
 
     #[test]
     fn sim() {
-        use sim::{Model, NullModel};
+        use model::{Model, NullModel};
         let rules = form::Form::test();
         let mut db = PlayerDb::new();
         let team_a = test_team(&mut db, 1, "AUS");
@@ -44,7 +43,7 @@ mod tests {
         let model = NullModel::new();
 
         while !state.complete() {
-            let ball = model.generate_delivery(&mut rng, &db, &state);
+            let ball = model.generate_delivery(&mut rng, state.snapshot(&db));
             state.update(&ball);
         }
         state.print_innings_summary();

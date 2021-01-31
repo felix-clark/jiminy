@@ -1,7 +1,7 @@
 //! Teams of players
 use crate::{
+    model::PlayerRating,
     player::{Player, PlayerDb, PlayerId},
-    rating::PlayerRating,
 };
 use serde::{Deserialize, Serialize};
 

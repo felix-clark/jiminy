@@ -1,47 +1,49 @@
-//! Simulation and models
-pub mod model;
-use std::marker::PhantomData;
-
-pub use model::Model;
-
-use crate::{
-    game::{DeliveryOutcome, Dismissal, GameState, Runs},
-    player::{PlayerDb, PlayerId},
-    rating::PlayerRating,
-};
+//! A model that doesn't depend on any data
+use super::{Model, PlayerRating};
+use crate::game::{DeliveryOutcome, Dismissal, GameSnapshot, Runs};
 use rand::{distributions::Uniform, Rng};
+use serde::{Deserialize, Serialize};
 
-/// A very simple model that doesn't use player stats
-pub struct NullModel<R>
-where
-    R: PlayerRating,
-{
-    _rating: PhantomData<R>,
+#[derive(Debug, Deserialize, Serialize)]
+pub struct PlayerRatingNull {
+    pub batting: BatRatingNull,
+    pub bowling: BowlRatingNull,
+    pub fielding: FieldRatingNull,
 }
-
-impl<R> NullModel<R>
-where
-    R: PlayerRating,
-{
-    pub fn new() -> Self {
+impl Default for PlayerRatingNull {
+    fn default() -> Self {
         Self {
-            _rating: PhantomData::<R>,
+            batting: BatRatingNull {},
+            bowling: BowlRatingNull {},
+            fielding: FieldRatingNull {},
         }
     }
 }
+impl PlayerRating for PlayerRatingNull {}
 
-impl<R> Model<R> for NullModel<R>
-where
-    R: PlayerRating,
-{
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BatRatingNull {}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct BowlRatingNull {}
+#[derive(Debug, Deserialize, Serialize)]
+pub struct FieldRatingNull {}
+
+/// A very simple model that doesn't use player stats
+pub struct NullModel {}
+
+impl NullModel {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl Model<PlayerRatingNull> for NullModel {
     fn generate_delivery(
         &self,
         rng: &mut impl Rng,
-        db: &PlayerDb<R>,
-        state: &GameState,
+        state: GameSnapshot<PlayerRatingNull>,
     ) -> DeliveryOutcome {
-        let bowler_id: PlayerId = state.bowler().expect("Could not get bowler");
-        let bowler = db.get(bowler_id).expect("DB error");
+        let bowler = state.bowler;
         let dist = Uniform::new(0., 1.);
         let rand: f64 = rng.sample(dist);
         if rand < 0.01 {

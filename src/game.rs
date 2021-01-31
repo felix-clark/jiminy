@@ -1,8 +1,8 @@
 //! Description of the state and events of a match.
 use crate::{
     form,
+    model::PlayerRating,
     player::{Player, PlayerDb},
-    rating::PlayerRating,
 };
 use crate::{
     player::PlayerId,
@@ -30,7 +30,9 @@ pub struct GameSnapshot<'a, R>
 where
     R: PlayerRating,
 {
-    striker: &'a Player<R>,
+    pub bowler: &'a Player<R>,
+    pub striker: &'a Player<R>,
+    pub non_striker: &'a Player<R>,
 }
 
 impl<'a> GameState<'a> {
@@ -47,18 +49,41 @@ impl<'a> GameState<'a> {
 
     // TODO: might need to constrain the db and snapshot references to distinguish them from the
     // lifetime of this GameState
-    pub fn snapshot<R>(&self, db: &PlayerDb<R>) -> GameSnapshot<R>
+    pub fn snapshot<'b, R>(&self, db: &'b PlayerDb<R>) -> GameSnapshot<'b, R>
     where
         R: PlayerRating,
     {
-        todo!()
+        let bowler = db
+            .get(self.bowler().expect("no bowler in state"))
+            .expect("Bowler not found");
+        let striker = db
+            .get(self.striker().expect("no striker in state"))
+            .expect("Striker not found");
+        let non_striker = db
+            .get(self.non_striker().expect("no non-striker in state"))
+            .expect("non-striker not found");
+        GameSnapshot {
+            bowler,
+            striker,
+            non_striker,
+        }
     }
 
     /// Get the current bowler
-    pub fn bowler(&self) -> Option<PlayerId> {
+    fn bowler(&self) -> Option<PlayerId> {
         self.current_innings_stats
             .as_ref()
             .map(|st| st.bowling_stats.current_bowler())
+    }
+    fn striker(&self) -> Option<PlayerId> {
+        self.current_innings_stats
+            .as_ref()
+            .map(|st| st.batting_stats.striker())
+    }
+    fn non_striker(&self) -> Option<PlayerId> {
+        self.current_innings_stats
+            .as_ref()
+            .map(|st| st.batting_stats.non_striker())
     }
 
     /// Whether the match is finished
