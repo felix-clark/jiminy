@@ -31,37 +31,45 @@ pub struct FieldRatingNull {}
 /// A very simple model that doesn't use player stats
 pub struct NullModel {}
 
-impl NullModel {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
 impl Model<PlayerRatingNull> for NullModel {
     fn generate_delivery(
         &self,
         rng: &mut impl Rng,
         state: GameSnapshot<PlayerRatingNull>,
     ) -> DeliveryOutcome {
+        let striker_id = state.striker.id;
         let bowler = state.bowler;
         let dist = Uniform::new(0., 1.);
         let rand: f64 = rng.sample(dist);
         if rand < 0.01 {
             DeliveryOutcome {
-                wicket: Some(Dismissal::Caught(
-                    "?fielder".to_string(),
-                    "?bowler".to_string(),
+                wicket: Some((
+                    striker_id,
+                    Dismissal::Caught {
+                        caught: "?fielder".to_string(),
+                        bowler: bowler.name.to_string(),
+                    },
                 )),
                 ..Default::default()
             }
         } else if rand <= 0.015 {
             DeliveryOutcome {
-                wicket: Some(Dismissal::Bowled(bowler.name.to_string())),
+                wicket: Some((
+                    striker_id,
+                    Dismissal::Bowled {
+                        bowler: bowler.name.to_string(),
+                    },
+                )),
                 ..Default::default()
             }
         } else if rand <= 0.02 {
             DeliveryOutcome {
-                wicket: Some(Dismissal::Lbw(bowler.name.to_string())),
+                wicket: Some((
+                    striker_id,
+                    Dismissal::Lbw {
+                        bowler: bowler.name.to_string(),
+                    },
+                )),
                 ..Default::default()
             }
         } else if rand <= 0.4 {

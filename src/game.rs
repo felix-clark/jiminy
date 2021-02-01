@@ -1,11 +1,10 @@
 //! Description of the state and events of a match.
 use crate::{
+    error::{Error, Result},
     form,
     model::PlayerRating,
-    player::{Player, PlayerDb},
-};
-use crate::{
     player::PlayerId,
+    player::{Player, PlayerDb},
     team::{BattingOrder, Bowlers, Team},
 };
 
@@ -36,37 +35,40 @@ where
 }
 
 impl<'a> GameState<'a> {
-    pub fn new(rules: form::Form, team_a: &'a Team, team_b: &'a Team) -> Self {
-        let current_innings_stats = Some(InningsStats::new(team_a, team_b, rules.balls_per_over));
-        Self {
+    pub fn new(rules: form::Form, team_a: &'a Team, team_b: &'a Team) -> Result<Self> {
+        let current_innings_stats = Some(InningsStats::new(team_a, team_b, rules.balls_per_over)?);
+        Ok(Self {
             form: rules,
             team_a,
             team_b,
             current_innings_stats,
             previous_innings: Vec::new(),
-        }
+        })
     }
 
     // TODO: might need to constrain the db and snapshot references to distinguish them from the
     // lifetime of this GameState
-    pub fn snapshot<'b, R>(&self, db: &'b PlayerDb<R>) -> GameSnapshot<'b, R>
+    pub fn snapshot<'b, R>(&self, db: &'b PlayerDb<R>) -> Result<GameSnapshot<'b, R>>
     where
         R: PlayerRating,
     {
+        let bowler_id = self.bowler().ok_or_else(|| Error::MatchComplete)?;
+        let striker_id = self.striker().ok_or_else(|| Error::MatchComplete)?;
+        let non_striker_id = self.non_striker().ok_or_else(|| Error::MatchComplete)?;
         let bowler = db
-            .get(self.bowler().expect("no bowler in state"))
-            .expect("Bowler not found");
+            .get(bowler_id)
+            .ok_or_else(|| Error::PlayerNotFound(bowler_id))?;
         let striker = db
-            .get(self.striker().expect("no striker in state"))
-            .expect("Striker not found");
+            .get(striker_id)
+            .ok_or_else(|| Error::PlayerNotFound(striker_id))?;
         let non_striker = db
-            .get(self.non_striker().expect("no non-striker in state"))
-            .expect("non-striker not found");
-        GameSnapshot {
+            .get(non_striker_id)
+            .ok_or_else(|| Error::PlayerNotFound(non_striker_id))?;
+        Ok(GameSnapshot {
             bowler,
             striker,
             non_striker,
-        }
+        })
     }
 
     /// Get the current bowler
@@ -97,14 +99,17 @@ impl<'a> GameState<'a> {
     }
 
     /// Batting team declares to complete their innings
-    pub fn declare(&mut self) {
-        self.new_innings();
+    pub fn declare(&mut self) -> Result<()> {
+        self.new_innings()
     }
 
     /// Update the game state based on the outcome of a delivery
-    pub fn update(&mut self, ball: &DeliveryOutcome) {
-        let innings_stats = self.current_innings_stats.as_mut().expect("Match is over!");
-        innings_stats.update(ball);
+    pub fn update(&mut self, ball: &DeliveryOutcome) -> Result<()> {
+        let innings_stats = self
+            .current_innings_stats
+            .as_mut()
+            .ok_or_else(|| Error::MatchComplete)?;
+        innings_stats.update(ball)?;
 
         // Check if we need to change to a new innings
         let mut new_innings = false;
@@ -126,22 +131,23 @@ impl<'a> GameState<'a> {
             new_innings = true;
         }
         if new_innings {
-            self.new_innings();
+            self.new_innings()?;
         }
+        Ok(())
     }
 
     /// Initiate a new innings
-    fn new_innings(&mut self) {
+    fn new_innings(&mut self) -> Result<()> {
         let last_innings_stats = self
             .current_innings_stats
             .take()
-            .expect("Must be a current innings");
+            .ok_or_else(|| Error::MatchComplete)?;
         let last_batting_team = last_innings_stats.batting_team;
         let last_bowling_team = last_innings_stats.bowling_team;
         self.previous_innings.push(last_innings_stats);
         // If all innings have been played (or if the game is over), exit
         if self.previous_innings.len() >= 2 * self.form.innings as usize {
-            return;
+            return Ok(());
         }
         // Make the losing team go first regardless if they are losing by 150 or more
         // and both teams have had equal opportunities so far.
@@ -153,7 +159,7 @@ impl<'a> GameState<'a> {
         if self.previous_innings.len() + 1 == 2 * self.form.innings as usize
             && last_batting_runs < last_bowling_runs
         {
-            return;
+            return Ok(());
         }
 
         let (next_batting_team, next_bowling_team) = if self.previous_innings.len() % 2 == 0
@@ -168,7 +174,8 @@ impl<'a> GameState<'a> {
             next_batting_team,
             next_bowling_team,
             self.form.balls_per_over,
-        ));
+        )?);
+        Ok(())
     }
 
     /// Returns the given team's current score
@@ -193,38 +200,39 @@ impl<'a> GameState<'a> {
     }
 
     /// Print a summary of each innings to stdout
-    pub fn print_innings_summary(&self) {
+    pub fn print_innings_summary(&self) -> Result<()> {
         for innings in self.previous_innings.iter() {
             println!("\n{} innings:", innings.batting_team.name);
-            innings.batting_stats.print_summary(innings.batting_team);
+            innings.batting_stats.print_summary(innings.batting_team)?;
             innings
                 .bowling_stats
-                .print_summary(innings.bowling_team, self.form.balls_per_over);
+                .print_summary(innings.bowling_team, self.form.balls_per_over)?;
             println!("Total: {}/{}", innings.runs(), innings.wickets());
         }
         println!("\n{}: {}", self.team_a.name, self.team_score(self.team_a));
         println!("{}: {}", self.team_b.name, self.team_score(self.team_b));
+        Ok(())
     }
 }
 
 /// Methods of dismissal
 #[derive(Clone)]
 pub enum Dismissal {
-    /// Legitimate delivery hits wicket and puts it down. (bowler)
-    Bowled(String),
-    /// Ball is hit in the air and caught in-bounds (caught, bowler)
-    Caught(String, String),
+    /// Legitimate delivery hits wicket and puts it down.
+    Bowled { bowler: String },
+    /// Ball is hit in the air and caught in-bounds
+    Caught { caught: String, bowler: String },
     /// Leg before wicket: A delivery that would have hit the wickets instead first
     /// makes contact with the striker (not the bat). (bowler)
-    Lbw(String),
+    Lbw { bowler: String },
     /// The striker is put out while running (fielder)
     // TODO: Consider not distinguishing these, but letting the simulation access both
     RunOutStriker(String),
     /// The only method by which the non-striker can be dismissed.
     RunOutNonStriker(String),
     /// The wicket-keeper puts down the wicket while the striker is out of the crease.
-    /// Takes precedence over run-out. (bowler)
-    Stumped(String),
+    /// Takes precedence over run-out.
+    Stumped { keeper: String },
     // TODO: rare dismissals
 }
 
@@ -232,11 +240,11 @@ impl Display for Dismissal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Dismissal::*;
         match &self {
-            Bowled(bowler) => write!(f, "b {}", bowler),
-            Caught(caught, bowler) => write!(f, "c {} b {}", caught, bowler),
-            Lbw(bowler) => write!(f, "lbw b {}", bowler),
+            Bowled { bowler } => write!(f, "b {}", bowler),
+            Caught { caught, bowler } => write!(f, "c {} b {}", caught, bowler),
+            Lbw { bowler } => write!(f, "lbw b {}", bowler),
             RunOutStriker(fielder) | RunOutNonStriker(fielder) => write!(f, "runout ({})", fielder),
-            Stumped(keeper) => write!(f, "st {}", keeper),
+            Stumped { keeper } => write!(f, "st {}", keeper),
         }
     }
 }
@@ -300,7 +308,7 @@ impl Extra {
 pub struct DeliveryOutcome {
     /// Whether a batsman is dismissed along with the method. In standard cricket the
     /// ball is dead upon a dismissal so there are no double-plays.
-    pub wicket: Option<Dismissal>,
+    pub wicket: Option<(PlayerId, Dismissal)>,
     /// Runs scored by batting the ball into play
     pub runs: Runs,
     /// Any extra runs accrued on the play
@@ -389,25 +397,29 @@ struct TeamBattingInningsStats {
 
 impl TeamBattingInningsStats {
     /// Create a new team stats object for a fresh innings
-    pub fn new(team: &Team) -> Self {
+    pub fn new(team: &Team) -> Result<Self> {
         let mut batting_order = team.batting_order();
         let mut batters = Vec::new();
         batters.push((
-            batting_order.next().expect("Not enough batters in order"),
+            batting_order
+                .next()
+                .ok_or_else(|| Error::MissingData("No first batter".into()))?,
             BatterInningsStats::default(),
         ));
         batters.push((
-            batting_order.next().expect("Not enough batters in order"),
+            batting_order
+                .next()
+                .ok_or_else(|| Error::MissingData("No second batter".into()))?,
             BatterInningsStats::default(),
         ));
-        Self {
+        Ok(Self {
             batting_order,
             batters,
             extras: 0,
             batter_a: 0,
             batter_b: 1,
             striker_a: true,
-        }
+        })
     }
 
     /// Returns true iff the innings is over
@@ -466,11 +478,11 @@ impl TeamBattingInningsStats {
     }
 
     /// Update the stats of a batter based on a delivery outcome
-    pub fn update(&mut self, ball: &DeliveryOutcome) {
-        let (striker_idx, non_striker_idx) = if self.striker_a {
-            (self.batter_a, self.batter_b)
+    pub fn update(&mut self, ball: &DeliveryOutcome) -> Result<()> {
+        let striker_idx = if self.striker_a {
+            self.batter_a
         } else {
-            (self.batter_b, self.batter_a)
+            self.batter_b
         };
 
         let striker_stats: &mut BatterInningsStats = &mut self.batters[striker_idx].1;
@@ -497,6 +509,7 @@ impl TeamBattingInningsStats {
                 striker_stats.sixes += 1;
             }
         }
+        drop(&striker_stats);
         self.extras += ball.extras.iter().map(|x| x.runs() as u16).sum::<u16>();
 
         // Switch if bye/leg byes result in an odd number of runs
@@ -516,12 +529,19 @@ impl TeamBattingInningsStats {
         }
 
         // Check for wickets in the outcome
-        if let Some(wicket) = &ball.wicket {
-            if matches!(wicket, Dismissal::RunOutNonStriker(_)) {
-                self.batters[non_striker_idx].1.out = Some(wicket.clone());
-            } else {
-                striker_stats.out = Some(wicket.clone());
-            }
+        if let Some((out_id, wicket)) = &ball.wicket {
+            let out_stats = self
+                .batters
+                .iter_mut()
+                .find(|(id, _)| id == out_id)
+                .ok_or_else(|| Error::PlayerNotFound(*out_id))?;
+            out_stats.1.out = Some(wicket.clone());
+
+            //if matches!(wicket, Dismissal::RunOutNonStriker(_)) {
+            //self.batters[non_striker_idx].1.out = Some(wicket.clone());
+            //} else {
+            //striker_stats.out = Some(wicket.clone());
+            //}
         }
 
         // Replace batters if they've been made out
@@ -543,11 +563,12 @@ impl TeamBattingInningsStats {
         if switch_striker {
             self.switch_striker();
         }
+        Ok(())
     }
 
     /// Print a summary table of the batting stats
     // TODO: Consider returning the table to allow printing to e.g. a file
-    pub fn print_summary(&self, team: &Team) {
+    pub fn print_summary(&self, team: &Team) -> Result<()> {
         use prettytable::{format::consts::*, Table};
         let mut table = Table::new();
         table.set_format(*FORMAT_NO_LINESEP_WITH_TITLE);
@@ -556,7 +577,8 @@ impl TeamBattingInningsStats {
         for batter in &self.batters {
             let batter_stats = &batter.1;
             table.add_row(row![
-                team.get_name(batter.0).expect("Couldn't get batter name"),
+                team.get_name(batter.0)
+                    .ok_or_else(|| Error::PlayerNotFound(batter.0))?,
                 match &batter_stats.out {
                     Some(wicket) => format!("{}", wicket),
                     None => "Not out".to_string(),
@@ -568,6 +590,7 @@ impl TeamBattingInningsStats {
             ]);
         }
         table.printstd();
+        Ok(())
     }
 }
 
@@ -633,18 +656,20 @@ struct TeamBowlingInningsStats {
 
 impl TeamBowlingInningsStats {
     /// Create a new team stats object for an innings
-    pub fn new(team: &Team) -> Self {
+    pub fn new(team: &Team) -> Result<Self> {
         let mut bowlers = team.bowlers();
         let bowler_stats: Vec<(PlayerId, BowlerInningsStats)> = vec![(
-            bowlers.next().expect("Could not get first bowler"),
+            bowlers
+                .next()
+                .ok_or_else(|| Error::MissingData("Could not get first bowler".into()))?,
             BowlerInningsStats::default(),
         )];
-        Self {
+        Ok(Self {
             bowlers,
             bowler_stats,
             current_bowler_index: 0,
             current_over_maiden: true,
-        }
+        })
     }
 
     /// Update the stats with a new delivery outcome
@@ -687,13 +712,16 @@ impl TeamBowlingInningsStats {
     /// Indicate that there is a new over and switch bowlers.
     /// A bowler must finish an over unless incapacitated or suspended (we will ignore
     /// these cases for now).
-    pub fn new_over(&mut self) {
+    pub fn new_over(&mut self) -> Result<()> {
         if self.current_over_maiden {
             self.bowler_stats[self.current_bowler_index].1.maiden_overs += 1;
         }
         self.current_over_maiden = true;
 
-        let next_bowler: PlayerId = self.bowlers.next().expect("Could not get the next bowler");
+        let next_bowler: PlayerId = self
+            .bowlers
+            .next()
+            .ok_or_else(|| Error::MissingData("Could not get next bowler".into()))?;
         self.current_bowler_index = match self
             .bowler_stats
             .iter()
@@ -706,6 +734,7 @@ impl TeamBowlingInningsStats {
                 self.bowler_stats.len() - 1
             }
         };
+        Ok(())
     }
 
     /// Returns a reference to the current bowler
@@ -715,14 +744,14 @@ impl TeamBowlingInningsStats {
 
     /// Print a summary table of the bowling stats
     // TODO: Consider returning the table to allow printing to e.g. a file
-    pub fn print_summary(&self, team: &Team, balls_per_over: u8) {
+    pub fn print_summary(&self, team: &Team, balls_per_over: u8) -> Result<()> {
         use prettytable::{format::consts::*, Table};
         let mut table = Table::new();
         table.set_format(*FORMAT_NO_LINESEP_WITH_TITLE);
         // table.set_format(*FORMAT_NO_BORDER_LINE_SEPARATOR);
         table.set_titles(row!["Bowler", "O", "M", "R", "W", "Econ"]);
         for bowler in &self.bowler_stats {
-            let bowler_stats = &bowler.1;
+            let (bowler_id, bowler_stats) = bowler;
             let overs_str = {
                 let n_overs = bowler_stats.balls / balls_per_over as u16;
                 let n_excess_balls = bowler_stats.balls % balls_per_over as u16;
@@ -733,7 +762,8 @@ impl TeamBowlingInningsStats {
                 }
             };
             table.add_row(row![
-                team.get_name(bowler.0).expect("Couldn't get player name"),
+                team.get_name(*bowler_id)
+                    .ok_or_else(|| Error::PlayerNotFound(*bowler_id))?,
                 overs_str,
                 bowler_stats.maiden_overs,
                 bowler_stats.runs,
@@ -742,6 +772,7 @@ impl TeamBowlingInningsStats {
             ]);
         }
         table.printstd();
+        Ok(())
     }
 }
 
@@ -761,16 +792,16 @@ struct InningsStats<'a> {
 }
 
 impl<'a> InningsStats<'a> {
-    pub fn new(batting_team: &'a Team, bowling_team: &'a Team, balls_per_over: u8) -> Self {
-        Self {
+    pub fn new(batting_team: &'a Team, bowling_team: &'a Team, balls_per_over: u8) -> Result<Self> {
+        Ok(Self {
             batting_team,
             bowling_team,
-            batting_stats: TeamBattingInningsStats::new(batting_team),
-            bowling_stats: TeamBowlingInningsStats::new(bowling_team),
+            batting_stats: TeamBattingInningsStats::new(batting_team)?,
+            bowling_stats: TeamBowlingInningsStats::new(bowling_team)?,
             overs: 0,
             balls: 0,
             balls_per_over,
-        }
+        })
     }
 
     /// Whether all (but one) batters have been made out. Indicates the innings must be
@@ -790,8 +821,8 @@ impl<'a> InningsStats<'a> {
     }
 
     /// Update the stats with a new delivery
-    pub fn update(&mut self, ball: &DeliveryOutcome) {
-        self.batting_stats.update(ball);
+    pub fn update(&mut self, ball: &DeliveryOutcome) -> Result<()> {
+        self.batting_stats.update(ball)?;
         self.bowling_stats.update(ball);
         if ball.legal() {
             self.balls += 1;
@@ -800,7 +831,8 @@ impl<'a> InningsStats<'a> {
             self.balls = 0;
             self.overs += 1;
             self.batting_stats.switch_striker();
-            self.bowling_stats.new_over();
+            self.bowling_stats.new_over()?;
         }
+        Ok(())
     }
 }

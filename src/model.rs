@@ -5,6 +5,8 @@ use rand::Rng;
 
 pub mod null;
 pub use null::{NullModel, PlayerRatingNull};
+pub mod naive_stats;
+pub use naive_stats::{NaiveStatsModel, PlayerRatingNaiveStats};
 
 pub trait PlayerRating {}
 
