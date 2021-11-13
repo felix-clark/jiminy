@@ -1,4 +1,5 @@
 //! Conditions of a match such as weather and ball state
+use crate::game::DeliveryOutcome;
 
 /// The style and manufacturer of the cricket ball
 #[derive(Debug, Clone, Copy)]
@@ -25,6 +26,13 @@ pub struct Ball {
     pub deliveries: u16,
     /// A proxy for wear-and-tear due to batting
     pub runs: u16,
+}
+
+impl Ball {
+    pub fn update(&mut self, ball: &DeliveryOutcome) {
+        self.deliveries += 1;
+        self.runs += ball.runs.runs() as u16;
+    }
 }
 
 #[derive(Debug, Clone)]

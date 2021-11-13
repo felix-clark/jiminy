@@ -118,6 +118,8 @@ impl<'a> GameState<'a> {
 
     /// Update the game state based on the outcome of a delivery
     pub fn update(&mut self, ball: &DeliveryOutcome) -> Result<()> {
+        self.conditions.ball.update(ball);
+
         let innings_stats = self
             .current_innings_stats
             .as_mut()
