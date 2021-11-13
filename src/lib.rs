@@ -2,6 +2,7 @@
 #[macro_use]
 extern crate prettytable;
 
+pub mod conditions;
 pub mod error;
 pub mod form;
 pub mod game;

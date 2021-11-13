@@ -1,8 +1,12 @@
 //! Struct to define the format of a match
 
+use crate::conditions::{Ball, BallType};
+
 /// Defines the format of a match
 #[derive(Debug)]
 pub struct Form {
+    /// The type and style of ball used.
+    pub ball_type: BallType,
     /// The number of turns each side has to bat.
     pub innings: u8,
     /// The number of overs in an innings, if limited
@@ -25,6 +29,7 @@ impl Default for Form {
             overs_per_innings: None,
             balls_per_over: 6,
             batsmen_per_side: 11,
+            ball_type: BallType::RedLeather,
         }
     }
 }
@@ -40,6 +45,7 @@ impl Form {
         Self {
             innings: 1,
             overs_per_innings: Some(50),
+            ball_type: BallType::WhiteLeather,
             ..Default::default()
         }
     }
@@ -49,7 +55,17 @@ impl Form {
         Self {
             innings: 1,
             overs_per_innings: Some(20),
+            ball_type: BallType::WhiteLeather,
             ..Default::default()
+        }
+    }
+
+    /// Generate a fresh ball
+    pub(crate) fn new_ball(&self) -> Ball {
+        Ball {
+            ball_type: self.ball_type,
+            deliveries: 0,
+            runs: 0,
         }
     }
 }

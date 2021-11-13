@@ -1,5 +1,6 @@
 //! Description of the state and events of a match.
 use crate::{
+    conditions::{Conditions, Weather},
     error::{Error, Result},
     form,
     model::PlayerRating,
@@ -22,6 +23,8 @@ pub struct GameState<'a> {
     current_innings_stats: Option<InningsStats<'a>>,
     /// Previous innings stats
     previous_innings: Vec<InningsStats<'a>>,
+    /// Other conditions
+    conditions: Conditions,
 }
 
 /// The snapshot at a moment (e.g. striker, bowler, non-striker, fielders...)
@@ -32,17 +35,23 @@ where
     pub bowler: &'a Player<R>,
     pub striker: &'a Player<R>,
     pub non_striker: &'a Player<R>,
+    pub conditions: Conditions,
 }
 
 impl<'a> GameState<'a> {
     pub fn new(rules: form::Form, team_a: &'a Team, team_b: &'a Team) -> Result<Self> {
         let current_innings_stats = Some(InningsStats::new(team_a, team_b, rules.balls_per_over)?);
+        let ball = rules.new_ball();
         Ok(Self {
             form: rules,
             team_a,
             team_b,
             current_innings_stats,
             previous_innings: Vec::new(),
+            conditions: Conditions {
+                ball,
+                weather: Weather {},
+            },
         })
     }
 
@@ -64,10 +73,12 @@ impl<'a> GameState<'a> {
         let non_striker = db
             .get(non_striker_id)
             .ok_or_else(|| Error::PlayerNotFound(non_striker_id))?;
+        let conditions = self.conditions.clone();
         Ok(GameSnapshot {
             bowler,
             striker,
             non_striker,
+            conditions,
         })
     }
 
