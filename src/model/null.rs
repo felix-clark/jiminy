@@ -1,6 +1,6 @@
 //! A model that doesn't depend on any data
 use super::{Model, PlayerRating};
-use crate::game::{DeliveryOutcome, Dismissal, GameSnapshot, Runs};
+use crate::game::{DeliveryOutcome, GameSnapshot};
 use rand::{distributions::Uniform, Rng};
 use serde::{Deserialize, Serialize};
 
@@ -39,56 +39,24 @@ impl Model<PlayerRatingNull> for NullModel {
     ) -> DeliveryOutcome {
         let striker_id = state.striker.id;
         let bowler = state.bowler;
+        // NOTE: Consider WeightedIndex distribution instead of manually cutting on a standard
+        // uniform value
         let dist = Uniform::new(0., 1.);
         let rand: f64 = rng.sample(dist);
         if rand < 0.01 {
-            DeliveryOutcome {
-                wicket: Some((
-                    striker_id,
-                    Dismissal::Caught {
-                        caught: "?fielder".to_string(),
-                        bowler: bowler.name.to_string(),
-                    },
-                )),
-                ..Default::default()
-            }
+            DeliveryOutcome::caught(striker_id, &bowler.name, "?fielder")
         } else if rand <= 0.015 {
-            DeliveryOutcome {
-                wicket: Some((
-                    striker_id,
-                    Dismissal::Bowled {
-                        bowler: bowler.name.to_string(),
-                    },
-                )),
-                ..Default::default()
-            }
+            DeliveryOutcome::bowled(striker_id, &bowler.name)
         } else if rand <= 0.02 {
-            DeliveryOutcome {
-                wicket: Some((
-                    striker_id,
-                    Dismissal::Lbw {
-                        bowler: bowler.name.to_string(),
-                    },
-                )),
-                ..Default::default()
-            }
+            DeliveryOutcome::lbw(striker_id, &bowler.name)
         } else if rand <= 0.4 {
-            DeliveryOutcome {
-                runs: Runs::Running(1),
-                ..Default::default()
-            }
+            DeliveryOutcome::running(1)
         } else if rand <= 0.42 {
-            DeliveryOutcome {
-                runs: Runs::Four,
-                ..Default::default()
-            }
+            DeliveryOutcome::four()
         } else if rand <= 0.424 {
-            DeliveryOutcome {
-                runs: Runs::Six,
-                ..Default::default()
-            }
+            DeliveryOutcome::six()
         } else {
-            DeliveryOutcome::default()
+            DeliveryOutcome::dot()
         }
     }
 }

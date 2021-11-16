@@ -4,8 +4,7 @@ use crate::{
     error::{Error, Result},
     form,
     model::PlayerRating,
-    player::PlayerId,
-    player::{Player, PlayerDb},
+    player::{Player, PlayerDb, PlayerId},
     team::Team,
 };
 pub mod stats;
@@ -231,6 +230,8 @@ impl<'a> GameState<'a> {
 }
 
 /// Methods of dismissal
+/// TODO: Consider holding PlayerId instead of name. The means we need another struct created with
+/// a PlayerDb to implement Display.
 #[derive(Clone)]
 pub enum Dismissal {
     /// Legitimate delivery hits wicket and puts it down.
@@ -296,12 +297,12 @@ pub enum Extra {
     /// Wides are counted against the bowler's stats.
     Wide,
     /// A bye in which the batsman does not make contact and the wicket is not made. Runs
-    /// can be scored but this is often zero. Balls that make it to the boundary are
-    /// scored as fours. Byes and leg byes can be scored from no-balls and wides. They
-    /// are not counted against the bowler's stats.
+    /// can be scored but this is often zero. Balls that make it to the boundary are scored as
+    /// fours. Byes and leg byes can be scored from no-balls and wides. Neither are counted against
+    /// the bowler's stats, although Byes are counted against the wicket-keeper.
     Bye(Runs),
     /// Similar to a bye, but with contact off the batter (not the bat) that is not LBW.
-    /// They are not counted against the bowler's stats.
+    /// They are not counted against the bowler's or wicket keeper's stats.
     LegBye(Runs),
     /// Penalty runs can also be awarded for various breaches of conduct.
     Penalty(u8),
@@ -335,6 +336,71 @@ impl DeliveryOutcome {
     pub fn legal(&self) -> bool {
         use Extra::*;
         !self.extras.iter().any(|ex| matches!(ex, NoBall | Wide))
+    }
+
+    // TODO: These should take the bowler ID and not just the name. This will require hooking up to
+    // a PlayerDb to display.
+    pub fn bowled(striker_id: PlayerId, bowler_name: &str) -> Self {
+        Self {
+            wicket: Some((
+                striker_id,
+                Dismissal::Bowled {
+                    bowler: bowler_name.to_string(),
+                },
+            )),
+            ..Default::default()
+        }
+    }
+
+    pub fn caught(striker_id: PlayerId, bowler_name: &str, catcher_name: &str) -> Self {
+        Self {
+            wicket: Some((
+                striker_id,
+                Dismissal::Caught {
+                    caught: catcher_name.to_string(),
+                    bowler: bowler_name.to_string(),
+                },
+            )),
+            ..Default::default()
+        }
+
+    }
+
+    pub fn lbw(striker_id: PlayerId, bowler_name: &str) -> Self {
+        Self {
+            wicket: Some((
+                striker_id,
+                Dismissal::Lbw {
+                    bowler: bowler_name.to_string(),
+                },
+            )),
+            ..Default::default()
+        }
+    }
+
+    pub fn dot() -> Self {
+        Self::default()
+    }
+
+    pub fn four() -> Self {
+        Self {
+            runs: Runs::Four,
+            ..Default::default()
+        }
+    }
+
+    pub fn six() -> Self {
+        Self {
+            runs: Runs::Six,
+            ..Default::default()
+        }
+    }
+
+    pub fn running(runs: u8) -> Self {
+        Self {
+            runs: Runs::Running(runs),
+            ..Default::default()
+        }
     }
 }
 
