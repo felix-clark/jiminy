@@ -74,19 +74,20 @@ impl TeamBattingInningsStats {
     /// Create a new team stats object for a fresh innings
     pub fn new(team: &Team) -> Result<Self> {
         let mut batting_order = team.batting_order();
-        let mut batters = Vec::new();
-        batters.push((
-            batting_order
-                .next()
-                .ok_or_else(|| Error::MissingData("No first batter".into()))?,
-            BatterInningsStats::default(),
-        ));
-        batters.push((
-            batting_order
-                .next()
-                .ok_or_else(|| Error::MissingData("No second batter".into()))?,
-            BatterInningsStats::default(),
-        ));
+        let batters = vec![
+            (
+                batting_order
+                    .next()
+                    .ok_or_else(|| Error::MissingData("No first batter".into()))?,
+                BatterInningsStats::default(),
+            ),
+            (
+                batting_order
+                    .next()
+                    .ok_or_else(|| Error::MissingData("No second batter".into()))?,
+                BatterInningsStats::default(),
+            ),
+        ];
         Ok(Self {
             batting_order,
             batters,
@@ -163,7 +164,7 @@ impl TeamBattingInningsStats {
         let striker_stats: &mut BatterInningsStats = &mut self.batters[striker_idx].1;
         // No Balls are actually counted against the balls faced by a batter, since more often than
         // not it is possible for the batter to score additional runs form a no-ball.
-        if !ball.extras.iter().any(|ex| matches!(ex, Wide)) {
+        if !ball.extras.iter().any(|ex| matches!(ex, Extra::Wide)) {
             striker_stats.balls += 1;
         }
 
@@ -186,7 +187,7 @@ impl TeamBattingInningsStats {
                 striker_stats.sixes += 1;
             }
         }
-        drop(&striker_stats);
+        // Now done modifying striker_stats, but droping a reference does nothing.
         self.extras += ball.extras.iter().map(|x| x.runs() as u16).sum::<u16>();
 
         // Switch if bye/leg byes result in an odd number of runs
@@ -255,7 +256,7 @@ impl TeamBattingInningsStats {
             let batter_stats = &batter.1;
             table.add_row(row![
                 team.get_name(batter.0)
-                    .ok_or_else(|| Error::PlayerNotFound(batter.0))?,
+                    .ok_or(Error::PlayerNotFound(batter.0))?,
                 match &batter_stats.out {
                     Some(wicket) => format!("{}", wicket),
                     None => "Not out".to_string(),

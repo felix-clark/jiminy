@@ -62,18 +62,18 @@ impl<'a> GameState<'a> {
     where
         R: PlayerRating,
     {
-        let bowler_id = self.bowler().ok_or_else(|| Error::MatchComplete)?;
-        let striker_id = self.striker().ok_or_else(|| Error::MatchComplete)?;
-        let non_striker_id = self.non_striker().ok_or_else(|| Error::MatchComplete)?;
+        let bowler_id = self.bowler().ok_or(Error::MatchComplete)?;
+        let striker_id = self.striker().ok_or(Error::MatchComplete)?;
+        let non_striker_id = self.non_striker().ok_or(Error::MatchComplete)?;
         let bowler = db
             .get(bowler_id)
-            .ok_or_else(|| Error::PlayerNotFound(bowler_id))?;
+            .ok_or(Error::PlayerNotFound(bowler_id))?;
         let striker = db
             .get(striker_id)
-            .ok_or_else(|| Error::PlayerNotFound(striker_id))?;
+            .ok_or(Error::PlayerNotFound(striker_id))?;
         let non_striker = db
             .get(non_striker_id)
-            .ok_or_else(|| Error::PlayerNotFound(non_striker_id))?;
+            .ok_or(Error::PlayerNotFound(non_striker_id))?;
         let conditions = self.conditions.clone();
         Ok(GameSnapshot {
             bowler,
@@ -122,7 +122,7 @@ impl<'a> GameState<'a> {
         let innings_stats = self
             .current_innings_stats
             .as_mut()
-            .ok_or_else(|| Error::MatchComplete)?;
+            .ok_or(Error::MatchComplete)?;
         innings_stats.update(ball)?;
 
         // Check if we need to change to a new innings
@@ -155,7 +155,7 @@ impl<'a> GameState<'a> {
         let last_innings_stats = self
             .current_innings_stats
             .take()
-            .ok_or_else(|| Error::MatchComplete)?;
+            .ok_or(Error::MatchComplete)?;
         let last_batting_team = last_innings_stats.batting_team;
         let last_bowling_team = last_innings_stats.bowling_team;
         self.previous_innings.push(last_innings_stats);

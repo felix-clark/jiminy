@@ -125,8 +125,7 @@ impl Model<PlayerRatingNaiveStats> for NaiveStatsModel {
         ];
         let d = WeightedIndex::new(outcomes.iter().map(|i| i.0)).unwrap();
         let choice = d.sample(rng);
-        let outcome = outcomes.swap_remove(choice).1;
-        outcome
+        outcomes.swap_remove(choice).1
     }
 }
 

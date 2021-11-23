@@ -47,6 +47,15 @@ where
     }
 }
 
+impl<R> Default for PlayerDb<R>
+where
+    R: PlayerRating,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 // #[serde(deny_unknown_fields)] // This makes an error if additional fields are present
 pub struct Player<R>
