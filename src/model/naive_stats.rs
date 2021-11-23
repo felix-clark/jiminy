@@ -53,6 +53,7 @@ pub struct BowlRatingNaiveStats {
     pub sr: f32,
     // Runs per wicket
     pub avg: f32,
+    // TODO: wide/noball rates
 }
 
 impl BowlRatingNaiveStats {

@@ -161,7 +161,9 @@ impl TeamBattingInningsStats {
         };
 
         let striker_stats: &mut BatterInningsStats = &mut self.batters[striker_idx].1;
-        if ball.legal() {
+        // No Balls are actually counted against the balls faced by a batter, since more often than
+        // not it is possible for the batter to score additional runs form a no-ball.
+        if !ball.extras.iter().any(|ex| matches!(ex, Wide))
             striker_stats.balls += 1;
         }
 
