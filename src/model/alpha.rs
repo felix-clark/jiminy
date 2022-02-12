@@ -1,6 +1,13 @@
 //! A first attempt at a non-trivial model
 use serde::{Deserialize, Serialize};
 
+// NOTE:
+// Inspiration could be taken from baseball's scout ratings system where league average rating of a
+// tool is 50 and the standard deviation is 10. However, since athletes are selected from the
+// extreme end of the talent distribution, there should be many more below-average athletes than
+// above-average athletes available (including bubble and sub-pro) so the distribution of
+// tool/overall scores can probably be modeled as exponential, with a level-dependent cutoff. 
+
 /// Ratings for batting
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BatRatingAlpha {
