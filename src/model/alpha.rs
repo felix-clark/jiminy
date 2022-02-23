@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 // extreme end of the talent distribution, there should be many more below-average athletes than
 // above-average athletes available (including bubble and sub-pro) so the distribution of
 // tool/overall scores can probably be modeled as exponential, with a level-dependent cutoff. 
+// The gamma distribution may be a useful tool here, as it generalizes the exponential distribution
+// for shape parameter != 1, effectively describing a soft lower bound.
 
 /// Ratings for batting
 #[derive(Debug, Deserialize, Serialize)]
