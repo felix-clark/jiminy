@@ -14,13 +14,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, Serialize)]
 pub struct BatRatingAlpha {
     // avoid wickets (eye + contact?)
-    //defense: u8,
+    defense: u8,
     // may be redundant concept
     // TODO: consider this as a status, or ball-by-ball stat
-    eye: u8,
+    // eye: u8,
+    // ability to hit ball for runs
     contact: u8,
-    // ability to put it in gap
-    control: u8,
+    // control or ability to put it in gap, largely to determine 4s
+    gap: u8,
     // sixes, possibly 4s
     power: u8,
 }
